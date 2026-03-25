@@ -1,12 +1,11 @@
 import streamlit as st
 import numpy as np
-import joblib
 import tensorflow as tf
 from PIL import Image
 import datetime
 
 # =========================
-# CLASS NAMES
+# CLASS NAMES (ALL CLASSES)
 # =========================
 class_names = [
 'Alternaria_D','Botrytis Leaf Blight','Bulb Rot','Bulb_blight-D','Caterpillar-P',
@@ -22,33 +21,14 @@ class_names = [
 ]
 
 # =========================
-# LOAD MODELS (SAFE)
+# LOAD CNN MODEL
 # =========================
-
-# CNN MODEL
 try:
     image_model = tf.keras.models.load_model("best_model.h5")
     st.success("✅ CNN Model Loaded")
 except Exception as e:
     st.error(f"❌ CNN Load Failed: {e}")
     image_model = None
-
-# RF MODEL
-try:
-    rf_model = joblib.load("crop_doctor_rf_model.pkl")
-    st.success("✅ RF Model Loaded")
-except Exception as e:
-    st.warning(f"⚠ RF Model Failed: {e}")
-    rf_model = None
-
-# ARIMA MODEL
-try:
-    import statsmodels.api as sm
-    arima_model = joblib.load("crop_doctor_arima_model.pkl")
-    st.success("✅ ARIMA Model Loaded")
-except Exception as e:
-    st.warning(f"⚠ ARIMA Load Failed: {e}")
-    arima_model = None
 
 # =========================
 # IMAGE PREDICTION
@@ -94,50 +74,36 @@ if st.button("Analyze Crop"):
             image = Image.open(image_file)
 
             # =========================
-            # 1. CNN
+            # 1. CNN PREDICTION
             # =========================
             disease, confidence = predict_image(image)
 
             # =========================
-            # 2. ENV MODEL
+            # 2. ENVIRONMENTAL LOGIC (REPLACED RF)
             # =========================
-            date_num = date.toordinal()
+            env_raw = (temperature + humidity + rainfall + prev_risk) / 4
 
-            if rf_model:
-                try:
-                    env_input = np.array([[date_num, temperature, humidity, rainfall, prev_risk]])
-                    env_risk = float(rf_model.predict(env_input)[0])
-                except:
-                    env_risk = 0.5
-            else:
-                env_risk = 0.5
-
-            if env_risk < 0.3:
+            if env_raw < 30:
                 env_label = "Low"
-            elif env_risk < 0.7:
+            elif env_raw < 70:
                 env_label = "Medium"
             else:
                 env_label = "High"
 
-            # =========================
-            # 3. FORECAST
-            # =========================
-            if arima_model:
-                try:
-                    forecast = arima_model.forecast(steps=1)
-                    forecast_risk = float(forecast[0])
-                except:
-                    forecast_risk = env_risk
-            else:
-                forecast_risk = env_risk
+            env_risk = env_raw / 100
 
             # =========================
-            # 4. FUSION
+            # 3. SIMPLE FORECAST (REPLACED ARIMA SAFE)
+            # =========================
+            forecast_risk = env_risk * 0.95 + 0.05  # small variation
+
+            # =========================
+            # 4. FUSION MODEL
             # =========================
             final_score = (
-                0.5 * confidence +
-                0.3 * env_risk +
-                0.2 * forecast_risk
+                0.6 * confidence +
+                0.25 * env_risk +
+                0.15 * forecast_risk
             )
 
             if final_score < 0.3:
@@ -164,3 +130,8 @@ if st.button("Analyze Crop"):
         st.write(f"**Final Risk Score:** {final_score:.3f}")
         st.write(f"**Final Alert Level:** {final_level}")
         st.write(f"**Recommended Action:** {action}")
+
+# =========================
+# FOOTER
+# =========================
+st.caption("CropDoctor v1.0 - Multimodal AI System")
