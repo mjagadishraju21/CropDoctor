@@ -5,7 +5,7 @@ from PIL import Image
 import datetime
 
 # =========================
-# CLASS NAMES (ALL CLASSES)
+# CLASS NAMES
 # =========================
 class_names = [
 'Alternaria_D','Botrytis Leaf Blight','Bulb Rot','Bulb_blight-D','Caterpillar-P',
@@ -23,9 +23,25 @@ class_names = [
 # =========================
 # LOAD CNN MODEL
 # =========================
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.layers import GlobalAveragePooling2D, Dense
+from tensorflow.keras.models import Model
+
+def load_model_fixed():
+    base = MobileNetV2(weights=None, include_top=False, input_shape=(224, 224, 3))
+    x = GlobalAveragePooling2D()(base.output)
+    x = Dense(128, activation='relu')(x)
+    output = Dense(len(class_names), activation='softmax')(x)
+
+    model = Model(inputs=base.input, outputs=output)
+
+    model.load_weights("model.keras/model.weights.h5")
+
+    return model
+
 try:
-    image_model = tf.keras.models.load_model("best_model.h5")
-    st.success("✅ CNN Model Loaded")
+    image_model = load_model_fixed()
+    st.success("✅ CNN Loaded (weights)")
 except Exception as e:
     st.error(f"❌ CNN Load Failed: {e}")
     image_model = None
@@ -73,14 +89,10 @@ if st.button("Analyze Crop"):
 
             image = Image.open(image_file)
 
-            # =========================
-            # 1. CNN PREDICTION
-            # =========================
+            # CNN
             disease, confidence = predict_image(image)
 
-            # =========================
-            # 2. ENVIRONMENTAL LOGIC (REPLACED RF)
-            # =========================
+            # ENVIRONMENT (REPLACES RF)
             env_raw = (temperature + humidity + rainfall + prev_risk) / 4
 
             if env_raw < 30:
@@ -92,14 +104,10 @@ if st.button("Analyze Crop"):
 
             env_risk = env_raw / 100
 
-            # =========================
-            # 3. SIMPLE FORECAST (REPLACED ARIMA SAFE)
-            # =========================
-            forecast_risk = env_risk * 0.95 + 0.05  # small variation
+            # FORECAST (SIMPLIFIED)
+            forecast_risk = env_risk * 0.95 + 0.05
 
-            # =========================
-            # 4. FUSION MODEL
-            # =========================
+            # FUSION
             final_score = (
                 0.6 * confidence +
                 0.25 * env_risk +
@@ -116,12 +124,9 @@ if st.button("Analyze Crop"):
                 final_level = "⚠ High Risk"
                 action = "High disease risk. Apply pesticides immediately."
 
-        # =========================
-        # OUTPUT
-        # =========================
         st.markdown("## 📊 CROP DOCTOR FINAL REPORT")
 
-        st.image(image, caption="Uploaded Image")
+        st.image(image)
 
         st.write(f"**Detected Disease:** {disease}")
         st.write(f"**Image Confidence:** {confidence:.3f}")
@@ -131,7 +136,4 @@ if st.button("Analyze Crop"):
         st.write(f"**Final Alert Level:** {final_level}")
         st.write(f"**Recommended Action:** {action}")
 
-# =========================
-# FOOTER
-# =========================
-st.caption("CropDoctor v1.0 - Multimodal AI System")
+st.caption("CropDoctor v1.0")
