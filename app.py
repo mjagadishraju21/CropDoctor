@@ -5,6 +5,7 @@ import tensorflow as tf
 from PIL import Image
 import datetime
 import os
+import traceback
 
 # =========================
 # CLASS NAMES
@@ -27,32 +28,51 @@ class_names = [
 # =========================
 
 # RF MODEL
+rf_model = None
 rf_path = "crop_doctor_rf_model.pkl"
+
 if os.path.exists(rf_path):
-    rf_model = joblib.load(rf_path)
-    st.success("✅ RF Model Loaded")
+    try:
+        rf_model = joblib.load(rf_path)
+        st.success("✅ RF Model Loaded")
+    except Exception as e:
+        st.error("❌ RF Model failed to load")
+        st.text(str(e))
+        traceback.print_exc()
+        rf_model = None
 else:
     st.warning("⚠ RF Model not found")
-    rf_model = None
 
 # ARIMA MODEL
+arima_model = None
 arima_path = "crop_doctor_arima_model.pkl"
+
 if os.path.exists(arima_path):
-    import statsmodels.api as sm
-    arima_model = joblib.load(arima_path)
-    st.success("✅ ARIMA Model Loaded")
+    try:
+        import statsmodels.api as sm
+        arima_model = joblib.load(arima_path)
+        st.success("✅ ARIMA Model Loaded")
+    except Exception as e:
+        st.error("❌ ARIMA Model failed to load")
+        st.text(str(e))
+        arima_model = None
 else:
     st.warning("⚠ ARIMA Model not found")
-    arima_model = None
 
 # CNN MODEL
+image_model = None
 cnn_path = "best_model.h5"
+
 if os.path.exists(cnn_path):
-    image_model = tf.keras.models.load_model(cnn_path)
-    st.success("✅ CNN Model Loaded")
+    try:
+        image_model = tf.keras.models.load_model(cnn_path)
+        st.success("✅ CNN Model Loaded")
+    except Exception as e:
+        st.error("❌ CNN Model failed to load")
+        st.text(str(e))
+        image_model = None
 else:
     st.error("❌ CNN Model Missing")
-    image_model = None
 
 # =========================
 # UI
@@ -84,19 +104,25 @@ if st.button("Analyze Crop"):
         # IMAGE MODEL
         # =========================
         if image_model:
-            image = Image.open(image_file).resize((224, 224))
-            img_array = np.array(image) / 255.0
-            img_array = np.expand_dims(img_array, axis=0)
+            try:
+                image = Image.open(image_file).resize((224, 224))
+                img_array = np.array(image) / 255.0
+                img_array = np.expand_dims(img_array, axis=0)
 
-            preds = image_model.predict(img_array)
-            class_index = int(np.argmax(preds))
-            confidence = float(np.max(preds))
+                preds = image_model.predict(img_array)
+                class_index = int(np.argmax(preds))
+                confidence = float(np.max(preds))
 
-            # 🔥 FIX (avoid IndexError)
-            if class_index >= len(class_names):
-                class_index = 0
+                if class_index >= len(class_names):
+                    class_index = 0
 
-            disease = class_names[class_index].replace("_", " ")
+                disease = class_names[class_index].replace("_", " ")
+
+            except Exception as e:
+                st.error("❌ Image processing failed")
+                st.text(str(e))
+                disease = "Error"
+                confidence = 0.0
         else:
             disease = "Model Not Loaded"
             confidence = 0.5
@@ -105,17 +131,20 @@ if st.button("Analyze Crop"):
         # ENVIRONMENT MODEL
         # =========================
         if rf_model:
-            date_num = date.toordinal()
+            try:
+                date_num = date.toordinal()
+                env_input = np.array([[date_num, temperature, humidity, rainfall, prev_risk]])
+                env_risk = float(rf_model.predict(env_input)[0])
 
-            env_input = np.array([[date_num, temperature, humidity, rainfall, prev_risk]])
-            env_risk = float(rf_model.predict(env_input)[0])
-
-            if env_risk < 0.3:
-                env_label = "Low"
-            elif env_risk < 0.7:
-                env_label = "Medium"
-            else:
-                env_label = "High"
+                if env_risk < 0.3:
+                    env_label = "Low"
+                elif env_risk < 0.7:
+                    env_label = "Medium"
+                else:
+                    env_label = "High"
+            except:
+                env_risk = 0.5
+                env_label = "Error"
         else:
             env_risk = 0.5
             env_label = "Unknown"
