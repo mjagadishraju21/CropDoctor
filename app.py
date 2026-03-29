@@ -28,6 +28,7 @@ class_names = [
 # =========================
 
 # RF MODEL
+import numpy as np
 rf_model = None
 rf_path = "crop_doctor_rf_model.pkl"
 
@@ -60,12 +61,13 @@ else:
     st.warning("⚠ ARIMA Model not found")
 
 # CNN MODEL
-image_model = None
-cnn_path = "best_model.h5"
+from tensorflow.keras.models import load_model
 
-if os.path.exists(cnn_path):
+image_model = None
+
+if os.path.exists("best_model.h5"):
     try:
-        image_model = tf.keras.models.load_model(cnn_path)
+        image_model = load_model("best_model.h5", compile=False)
         st.success("✅ CNN Model Loaded")
     except Exception as e:
         st.error("❌ CNN Model failed to load")
